@@ -25,8 +25,8 @@ npx skills add Lynneu/he-media-tracker -a claude-code
 ```bash
 git clone https://github.com/Lynneu/he-media-tracker.git
 cd he-media-tracker
-chmod +x scripts/he.mjs
-sudo ln -sf "$(pwd)/scripts/he.mjs" /usr/local/bin/he
+chmod +x skills/he-media-tracker/scripts/he.mjs
+sudo ln -sf "$(pwd)/skills/he-media-tracker/scripts/he.mjs" /usr/local/bin/he
 ```
 
 ## 使用

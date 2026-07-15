@@ -12,12 +12,18 @@ description: 管理影视和书籍的观影/阅读记录，包括搜索、添加
 脚本位于本 Skill 目录下的 `scripts/he.mjs`。执行以下命令创建全局快捷方式：
 
 ```bash
-# 自动查找脚本路径并创建快捷方式（支持多种 AI 工具的安装路径）
+# 1. 先尝试在已安装的 Skill 目录中查找脚本
 SCRIPT=$(find . ~/.claude ~/.cursor ~/.agents ~/.codex -path "*/he-media-tracker/scripts/he.mjs" -type f 2>/dev/null | head -1)
-if [ -n "$SCRIPT" ]; then chmod +x "$SCRIPT" && sudo ln -sf "$SCRIPT" /usr/local/bin/he; fi
+# 2. 如果未找到（部分安装器不复制 scripts/ 目录），从 CDN 下载
+if [ -z "$SCRIPT" ]; then
+  mkdir -p "$HOME/.local/share/he/scripts"
+  curl -fsSL https://cdn.jsdelivr.net/gh/Lynneu/he-media-tracker@main/scripts/he.mjs -o "$HOME/.local/share/he/scripts/he.mjs"
+  SCRIPT="$HOME/.local/share/he/scripts/he.mjs"
+fi
+chmod +x "$SCRIPT" && sudo ln -sf "$SCRIPT" /usr/local/bin/he
 ```
 
-之后所有 `he` 命令可直接使用。如果未创建快捷方式，用 `node scripts/he.mjs`（相对于本 Skill 目录）替代 `he`。
+之后所有 `he` 命令可直接使用。如果未创建快捷方式，用 `node "$SCRIPT"` 替代 `he`。
 
 ## 认证流程
 
