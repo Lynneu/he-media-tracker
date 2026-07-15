@@ -19,6 +19,42 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
+import { setGlobalDispatcher, ProxyAgent, request } from 'undici'
+
+// ===== 代理支持 =====
+const PROXY_URL = process.env.HTTP_PROXY || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.https_proxy
+
+if (PROXY_URL) {
+  setGlobalDispatcher(new ProxyAgent(PROXY_URL))
+}
+
+async function fetchProxy(url, opts = {}, timeout = 10000) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeout)
+
+  try {
+    const res = await request(url, {
+      method: opts.method || 'GET',
+      headers: opts.headers,
+      body: opts.body,
+      headersTimeout: timeout,
+      bodyTimeout: timeout,
+      signal: ctrl.signal
+    })
+    clearTimeout(t)
+
+    const body = await res.body.text()
+    return {
+      ok: res.statusCode >= 200 && res.statusCode < 300,
+      status: res.statusCode,
+      json: async () => JSON.parse(body),
+      text: async () => body
+    }
+  } catch (err) {
+    clearTimeout(t)
+    throw err
+  }
+}
 
 // 全局错误处理（超时、网络错误等）
 function handleError(err) {
@@ -30,14 +66,6 @@ function handleError(err) {
 // ===== 配置（API key 已隐藏在代理服务器中，零密钥泄露）=====
 const API_BASE = 'https://he-viewport.vercel.app/api'
 const TOKEN_PATH = join(homedir(), '.he', 'auth.json')
-
-// ===== 工具函数 =====
-
-function fetchTimeout(url, opts = {}, ms = 8000) {
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), ms)
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t))
-}
 
 function parseArgs(argv) {
   const args = argv.slice(2)
@@ -80,7 +108,7 @@ async function dbRequest(method, path, body) {
   }
   if (body) headers['Prefer'] = 'return=representation'
 
-  const res = await fetchTimeout(`${API_BASE}/${path}`, {
+  const res = await fetchProxy(`${API_BASE}/${path}`, {
     method, headers, body: body ? JSON.stringify(body) : undefined,
   })
 
@@ -104,7 +132,7 @@ async function register(opts) {
     out({ error: '用法: he register --email xxx --password xxx --username xxx' })
     process.exit(1)
   }
-  const res = await fetchTimeout(`${API_BASE}/auth/register`, {
+  const res = await fetchProxy(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -136,7 +164,7 @@ async function login(opts) {
     out({ error: '用法: he login --email xxx --password xxx' })
     process.exit(1)
   }
-  const res = await fetchTimeout(`${API_BASE}/auth/login`, {
+  const res = await fetchProxy(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: opts.email, password: opts.password }),
@@ -166,7 +194,7 @@ async function whoami() {
     return
   }
   const token = getToken()
-  const res = await fetchTimeout(`${API_BASE}/whoami`, {
+  const res = await fetchProxy(`${API_BASE}/whoami`, {
     headers: { Authorization: `Bearer ${token.access_token}` },
   })
   const data = await res.json().catch(() => ({ authenticated: false }))
@@ -185,7 +213,7 @@ async function search(opts, positional) {
   const params = new URLSearchParams({ q: query })
   if (opts.type) params.set('type', opts.type)
 
-  const res = await fetchTimeout(`${API_BASE}/search?${params}`)
+  const res = await fetchProxy(`${API_BASE}/search?${params}`)
   if (!res.ok) {
     out({ error: '搜索失败，请稍后重试' })
     process.exit(1)
